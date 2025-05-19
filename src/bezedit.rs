@@ -31,6 +31,10 @@ impl BezEditor {
         }
     }
 
+    pub fn bezpaths(&mut self) -> &[BezPath] {
+        &self.bezpath
+    }
+
     pub fn update(&mut self) {
         let is_bezpath_closed = |bezpath: &BezPath| {
             bezpath
