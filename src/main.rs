@@ -51,7 +51,12 @@ async fn main() {
             let bbox = bezpath.bounding_box().expand();
             let mut active_segments = HashMap::new();
             let mut i = 0;
-            for x in (bbox.x0 as isize..=bbox.x1 as isize).step_by(GRID_SIZE) {
+
+            let start_x = bbox.x0 as isize / GRID_SIZE as isize;
+            let end_x = bbox.x1 as isize / GRID_SIZE as isize + 1;
+
+            for x in start_x..=end_x {
+                let x = x * GRID_SIZE as isize;
                 // push segments which are need to be checked for intersection.
                 while i < segments.len() && segments[i].0.x0 as isize <= x {
                     let (min_x, max_x, segment) = (
@@ -67,7 +72,11 @@ async fn main() {
                 for (_, seg) in &active_segments {
                     for inter in seg.intersect_line(line) {
                         let intersection = line.eval(inter.line_t);
-                        let (x, y) = (intersection.x as isize, intersection.y as isize);
+                        let (x, y) = (
+                            intersection.x as isize,
+                            (intersection.y / GRID_SIZE as f64).floor() as isize
+                                * GRID_SIZE as isize,
+                        );
                         xys.entry(x).and_modify(|ys| ys.push(y)).or_insert(vec![y]);
                     }
                 }
@@ -86,9 +95,75 @@ async fn main() {
             }
         }
 
+        // sort the bbox based on min x-axis
+        segments.sort_by(|a, b| (a.0.y0 as isize).cmp(&(b.0.y0 as isize)));
+
+        let mut yxs = HashMap::<isize, Vec<isize>>::new();
+
+        if let Some(bezpath) = first_bezpath {
+            let bbox = bezpath.bounding_box().expand();
+            let mut active_segments = HashMap::new();
+            let mut i = 0;
+
+            let start_y = bbox.y0 as isize / GRID_SIZE as isize;
+            let end_y = bbox.y1 as isize / GRID_SIZE as isize + 1;
+
+            for y in start_y..end_y {
+                let y = y * GRID_SIZE as isize;
+                // push segments which are need to be checked for intersection.
+                while i < segments.len() && segments[i].0.y0 as isize <= y {
+                    let (min_y, max_y, segment) = (
+                        segments[i].0.y0 as isize,
+                        segments[i].0.y1 as isize,
+                        segments[i].1,
+                    );
+                    active_segments.insert((min_y, max_y), segment);
+                    i += 1;
+                }
+
+                let line = Line::new((bbox.x0, y as f64), (bbox.x1, y as f64));
+                for (_, seg) in &active_segments {
+                    for inter in seg.intersect_line(line) {
+                        let intersection = line.eval(inter.line_t);
+                        let (x, y) = (
+                            (intersection.x / GRID_SIZE as f64).floor() as isize
+                                * GRID_SIZE as isize,
+                            intersection.y as isize,
+                        );
+                        yxs.entry(x).and_modify(|ys| ys.push(y)).or_insert(vec![y]);
+                    }
+                }
+
+                // pop segments whose bouding boxed are behind current x intersection checking
+                let mut deactives: Vec<(isize, isize)> = Vec::new();
+                for (active, _) in &active_segments {
+                    if active.1 < y {
+                        deactives.push(*active);
+                    }
+                }
+                for i in 0..deactives.len() {
+                    let d = deactives[i];
+                    active_segments.remove(&d);
+                }
+            }
+        }
+
         clear_background(WHITE);
         bez_editor.draw();
         for xy in xys {
+            let x = xy.0;
+            for y in xy.1 {
+                draw_rectangle_lines(
+                    x as f32,
+                    y as f32,
+                    GRID_SIZE as f32,
+                    GRID_SIZE as f32,
+                    2.,
+                    RED,
+                );
+            }
+        }
+        for xy in yxs {
             let x = xy.0;
             for y in xy.1 {
                 draw_rectangle_lines(
