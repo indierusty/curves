@@ -1,7 +1,7 @@
 use kurbo::{BezPath, ParamCurve, PathEl, Point};
 use macroquad::prelude::*;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Selection {
     bezpath_index: usize,
     element_index: usize,
@@ -45,7 +45,7 @@ impl BezEditor {
             let mouse = Point::new(x as f64, y as f64);
             self.selected = None;
 
-            for bez_index in 0..self.bezpath.len() {
+            'a: for bez_index in 0..self.bezpath.len() {
                 let bezpath = &self.bezpath[bez_index];
                 for ele_index in 0..bezpath.elements().len() {
                     let element = bezpath.elements()[ele_index];
@@ -60,9 +60,29 @@ impl BezEditor {
                         let point = points[point_index];
                         if point.distance(mouse) < 5. {
                             self.selected = Some(Selection::new(bez_index, ele_index, point_index));
+                            break 'a;
                         }
                     }
                 }
+            }
+        }
+
+        if is_key_down(KeyCode::C) && self.selected.is_some() {
+            let Selection {
+                bezpath_index,
+                element_index,
+                point_index: _,
+            } = self.selected.unwrap();
+
+            let bezpath = &mut self.bezpath[bezpath_index];
+            // if element index in point at MoveTo element then increment it to point next element / segment.
+            let element_index = element_index.min(1);
+
+            if element_index <= bezpath.segments().count() {
+                let segment = bezpath.get_seg(element_index).unwrap();
+                let cubic = segment.to_cubic();
+                *bezpath.elements_mut().get_mut(element_index).unwrap() =
+                    PathEl::CurveTo(cubic.p1, cubic.p2, cubic.p3);
             }
         }
 
@@ -130,29 +150,33 @@ impl BezEditor {
     }
 
     pub fn draw(&self) {
-        for bezpath in &self.bezpath {
+        for (bi, bezpath) in self.bezpath.iter().enumerate() {
             if let Some(point) = bezpath.elements()[0].end_point() {
                 draw_circle(point.x as f32, point.y as f32, 3., RED);
             }
-            for segment in bezpath.segments() {
-                match segment {
-                    kurbo::PathSeg::Line(line) => {
-                        draw_circle(line.p0.x as f32, line.p0.y as f32, 3., RED);
-                        draw_circle(line.p1.x as f32, line.p1.y as f32, 3., RED);
-                    }
-                    kurbo::PathSeg::Quad(quad_bez) => {
-                        draw_circle(quad_bez.p0.x as f32, quad_bez.p0.y as f32, 3., RED);
-                        draw_circle(quad_bez.p1.x as f32, quad_bez.p1.y as f32, 3., RED);
-                        draw_circle(quad_bez.p2.x as f32, quad_bez.p2.y as f32, 3., RED);
-                    }
-                    kurbo::PathSeg::Cubic(cubic_bez) => {
-                        draw_circle(cubic_bez.p0.x as f32, cubic_bez.p0.y as f32, 3., RED);
-                        draw_circle(cubic_bez.p1.x as f32, cubic_bez.p1.y as f32, 3., RED);
-                        draw_circle(cubic_bez.p2.x as f32, cubic_bez.p2.y as f32, 3., RED);
-                        draw_circle(cubic_bez.p3.x as f32, cubic_bez.p3.y as f32, 3., RED);
+            for (ei, elements) in bezpath.elements().iter().enumerate() {
+                let points = match elements {
+                    PathEl::MoveTo(p1) => [p1].to_vec(),
+                    PathEl::LineTo(p1) => [p1].to_vec(),
+                    PathEl::QuadTo(p1, p2) => [p1, p2].to_vec(),
+                    PathEl::CurveTo(p1, p2, p3) => [p1, p2, p3].to_vec(),
+                    PathEl::ClosePath => [].to_vec(),
+                };
+                for (pi, point) in points.iter().enumerate() {
+                    let active = self
+                        .selected
+                        .is_some_and(|s| s == Selection::new(bi, ei, pi));
+
+                    if pi + 1 == points.len() {
+                        let color = if active { GREEN } else { BLUE };
+                        draw_circle(point.x as f32, point.y as f32, 3., color);
+                    } else {
+                        let color = if active { GREEN } else { SKYBLUE };
+                        draw_circle_lines(point.x as f32, point.y as f32, 3., 2., color);
                     }
                 }
-
+            }
+            for segment in bezpath.segments() {
                 let mut last_point: Option<Point> = None;
                 let mut t = 0.;
                 while t <= 1. {
