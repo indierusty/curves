@@ -17,6 +17,8 @@ fn conf() -> Conf {
     }
 }
 
+const GRID_SIZE: usize = 5;
+
 #[macroquad::main(conf)]
 async fn main() {
     let mut bez_editor = BezEditor::new();
@@ -49,7 +51,7 @@ async fn main() {
             let bbox = bezpath.bounding_box().expand();
             let mut active_segments = HashMap::new();
             let mut i = 0;
-            for x in (bbox.x0 as isize..=bbox.x1 as isize).step_by(5) {
+            for x in (bbox.x0 as isize..=bbox.x1 as isize).step_by(GRID_SIZE) {
                 // push segments which are need to be checked for intersection.
                 while i < segments.len() && segments[i].0.x0 as isize <= x {
                     let (min_x, max_x, segment) = (
@@ -89,7 +91,14 @@ async fn main() {
         for xy in xys {
             let x = xy.0;
             for y in xy.1 {
-                draw_circle(x as f32, y as f32, 2., RED);
+                draw_rectangle_lines(
+                    x as f32,
+                    y as f32,
+                    GRID_SIZE as f32,
+                    GRID_SIZE as f32,
+                    2.,
+                    RED,
+                );
             }
         }
         next_frame().await
