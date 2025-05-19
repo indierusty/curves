@@ -32,13 +32,14 @@ impl BezEditor {
     }
 
     pub fn update(&mut self) {
-        let is_last_close_elm = |bezpath: &BezPath| {
+        let is_bezpath_closed = |bezpath: &BezPath| {
             bezpath
                 .elements()
                 .last()
                 .map_or(false, |elm| matches!(*elm, PathEl::ClosePath))
         };
 
+        // Select the bezpath if any of its points is close enough to the mouse position and 'S' is pressed.
         if is_key_pressed(KeyCode::S) {
             let (x, y) = mouse_position();
             let mouse = Point::new(x as f64, y as f64);
@@ -65,7 +66,7 @@ impl BezEditor {
             }
         }
 
-        // move selected points to mouse position if the is any selection.
+        // Move selected point to the mouse position if there is any selection.
         if is_key_down(KeyCode::Space) {
             if let Some(selection) = self.selected {
                 let Selection {
@@ -94,12 +95,11 @@ impl BezEditor {
             }
         }
 
+        // Insert a new segment in the currently selected bezpath.
+        // If no bezpath is selected or the selected bezpath is closed then create a new one insert a point.
         if is_key_pressed(KeyCode::I) {
             let bezpath = if self.selected.is_none()
-                || self.bezpath[self.selected.unwrap().bezpath_index]
-                    .elements()
-                    .last()
-                    .map_or(false, |elm| *elm == PathEl::ClosePath)
+                || is_bezpath_closed(&self.bezpath[self.selected.unwrap().bezpath_index])
             {
                 self.selected = Some(Selection::new(self.bezpath.len(), 0, 0));
                 self.bezpath.push(BezPath::new());
@@ -112,27 +112,19 @@ impl BezEditor {
 
             let (x, y) = mouse_position();
             let point = Point::new(x as f64, y as f64);
+
             if bezpath.elements().is_empty() {
                 bezpath.push(PathEl::MoveTo(point));
-                println!("inseting moveto");
             } else {
                 bezpath.push(PathEl::LineTo(point));
-                println!("inseting lineto");
             }
         }
 
+        // Close the selected bezpath.
         if is_key_pressed(KeyCode::J) {
-            let bezpath = if let Some(selected) = &self.selected {
-                &mut self.bezpath[selected.bezpath_index]
-            } else {
-                self.bezpath.push(BezPath::new());
-                self.bezpath.last_mut().unwrap()
-            };
-
-            if !bezpath.is_empty() && !is_last_close_elm(&bezpath) {
-                bezpath.line_to(bezpath.elements().first().unwrap().end_point().unwrap());
+            if let Some(selected) = &self.selected {
+                let bezpath = &mut self.bezpath[selected.bezpath_index];
                 bezpath.close_path();
-                println!("closed bezpath")
             }
         }
     }
